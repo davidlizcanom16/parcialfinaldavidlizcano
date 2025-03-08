@@ -97,11 +97,37 @@ with tab6:
 st.markdown("---")
 
 st.subheader("📢 Key Insights")
-st.write("- The retention rate has shown a steady trend over the years with some fluctuations.")
-st.write("- Student satisfaction levels have varied but follow a general upward trend.")
-st.write("- Enrollment in different departments exhibits interesting shifts, potentially influenced by job market trends.")
-st.write("- Spring and Fall term trends highlight key differences in student engagement and retention.")
-st.write("- The conversion rate from applications to enrollments shows how efficiently students are being admitted and retained.")
-st.write("- Correlation analysis provides insights on how different variables influence each other over time.")
+"""
+### Insights from Data Analysis on Student Retention and Satisfaction
 
-st.success("✅ This dashboard provides valuable insights for university decision-makers!")
+#### 1. Retention Rate Trends Over Time
+- The retention rate has shown an overall upward trend from 2015 to 2024, with some fluctuations.
+- A significant drop occurred around 2020, likely due to the impact of the COVID-19 pandemic.
+- From 2020 onwards, there has been a steady recovery, reaching its highest point in 2024.
+- **Recommendation:** Breaking down retention rates by department could help identify which areas contribute most to retention gains or declines.
+
+#### 2. Enrollment Breakdown by Department
+- Engineering consistently has the highest enrollment numbers throughout the years.
+- Business follows as the second-largest department, showing continuous growth.
+- Arts and Sciences maintain relatively stable but lower enrollment figures, with slight fluctuations.
+- **Interesting pattern:** While Engineering and Business grow, Sciences show slight declines in certain periods.
+- **Recommendation:** If increasing enrollment in specific departments is a goal, investigating factors driving growth in Engineering and Business could help apply similar strategies to underperforming areas.
+
+#### 3. Student Satisfaction Trends
+- Student satisfaction has been on a steady rise from 2015 to 2024, with minor fluctuations.
+- A decline around 2020 is noticeable, likely due to pandemic-related disruptions in education.
+- Post-pandemic recovery suggests the university has implemented improvements in the student experience.
+- In 2024, satisfaction reaches its highest level in the dataset.
+
+#### 4. Correlation Analysis
+- **Applications, admissions, and enrollments are highly correlated (~1.00),** indicating a strong interdependence between these processes.
+- **Student satisfaction is strongly correlated with applications and admissions (~0.99 and 0.98, respectively).** This suggests that improving the student experience attracts more applicants.
+- **Retention rate has a lower correlation with other variables (0.85-0.88),** implying that while related, additional factors influence whether students stay enrolled.
+
+### General Conclusions
+- **Enhancing student satisfaction can boost retention and attract more applicants.**
+- **Retention is more volatile than satisfaction,** meaning external factors may impact student persistence.
+- **Analyzing retention fluctuations by department and year could help identify critical factors affecting student persistence.**
+- If retention drops in certain years, investigating external events or policy changes could lead to proactive strategies for improvement.
+"""
+
