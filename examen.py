@@ -30,11 +30,11 @@ col1.metric("Total Applications", filtered_df["Applications"].sum())
 col2.metric("Total Admitted", filtered_df["Admitted"].sum())
 col3.metric("Total Enrolled", filtered_df["Enrolled"].sum())
 
-
-# Aplicación más común del año seleccionado
-st.subheader("🏆 Most Common Application in Selected Year")
-most_common_application = filtered_df.groupby('Applications').size().idxmax()
-st.write(f"The most common application count in {selected_year} was {most_common_application} applications.")
+# Carrera más común del año seleccionado
+st.subheader("🏆 Most Commonly Chosen Major in Selected Year")
+departments = ['Engineering Enrolled', 'Business Enrolled', 'Arts Enrolled', 'Science Enrolled']
+most_common_major = filtered_df[departments].sum().idxmax().replace(" Enrolled", "")
+st.write(f"The most commonly chosen major in {selected_year} was {most_common_major}.")
 
 st.markdown("---")
 
