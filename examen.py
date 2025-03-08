@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import plotly.express as px
+import seaborn as sns
+import numpy as np
 
 # Cargar datos
 @st.cache_data
@@ -76,10 +78,30 @@ with tab4:
 
 st.markdown("---")
 
+# Nueva sección: Tasa de Conversión
+tab5, tab6 = st.tabs(["📊 Conversion Rate", "📈 Correlation Analysis"])
+
+with tab5:
+    st.subheader("🔄 Application-to-Enrollment Conversion Rate")
+    df['Conversion Rate (%)'] = (df['Enrolled'] / df['Applications']) * 100
+    fig = px.line(df, x='Year', y='Conversion Rate (%)', markers=True, title="Conversion Rate Over the Years")
+    st.plotly_chart(fig, use_container_width=True)
+
+with tab6:
+    st.subheader("🔗 Correlation Heatmap")
+    corr_matrix = df[['Applications', 'Admitted', 'Enrolled', 'Retention Rate (%)', 'Student Satisfaction (%)']].corr()
+    fig, ax = plt.subplots(figsize=(8, 6))
+    sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt='.2f', ax=ax)
+    st.pyplot(fig)
+
+st.markdown("---")
+
 st.subheader("📢 Key Insights")
 st.write("- The retention rate has shown a steady trend over the years with some fluctuations.")
 st.write("- Student satisfaction levels have varied but follow a general upward trend.")
 st.write("- Enrollment in different departments exhibits interesting shifts, potentially influenced by job market trends.")
 st.write("- Spring and Fall term trends highlight key differences in student engagement and retention.")
+st.write("- The conversion rate from applications to enrollments shows how efficiently students are being admitted and retained.")
+st.write("- Correlation analysis provides insights on how different variables influence each other over time.")
 
 st.success("✅ This dashboard provides valuable insights for university decision-makers!")
