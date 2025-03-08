@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import plotly.express as px
 
 # Cargar datos
 @st.cache_data
@@ -10,73 +11,69 @@ def load_data():
 
 df = load_data()
 
+# Configuración de la página
+st.set_page_config(page_title="University Dashboard", layout="wide")
+
 # Título del dashboard
-st.title("University Student Dashboard")
+st.title("📊 University Student Dashboard")
+st.markdown("---")
 
-# Mostrar datos
-st.subheader("Vista previa de los datos")
-st.write(df.head())
+# Sidebar para filtros
+years = df['Year'].unique()
+selected_year = st.sidebar.selectbox("Select Year", years)
+filtered_df = df[df['Year'] == selected_year]
 
-# 1. Total applications, admissions, and enrollments per year & term
-st.subheader("Total Applications, Admissions, and Enrollments per Year & Term")
-metrics_per_term_year = df.groupby(['Year', 'Term'])[['Applications', 'Admitted', 'Enrolled']].sum()
-st.write(metrics_per_term_year)
+# Métricas clave
+st.subheader("📌 Key Metrics")
+col1, col2, col3 = st.columns(3)
+col1.metric("Total Applications", filtered_df["Applications"].sum())
+col2.metric("Total Admitted", filtered_df["Admitted"].sum())
+col3.metric("Total Enrolled", filtered_df["Enrolled"].sum())
 
-# 2. Retention rate trends over time
-st.subheader("Retention Rate Trends Over Time")
-fig, ax = plt.subplots()
-ax.plot(df['Year'], df['Retention Rate (%)'], marker='o', linestyle='-', label='Retention Rate')
-ax.set_xlabel('Year')
-ax.set_ylabel('Retention Rate (%)')
-ax.set_title('Retention Rate Trends Over Time')
-ax.legend()
-st.pyplot(fig)
+st.markdown("---")
 
-# 3. Student satisfaction over years
-st.subheader("Student Satisfaction Over the Years")
-fig, ax = plt.subplots()
-ax.plot(df['Year'], df['Student Satisfaction (%)'], marker='s', linestyle='-', color='g', label='Student Satisfaction')
-ax.set_xlabel('Year')
-ax.set_ylabel('Student Satisfaction (%)')
-ax.set_title('Student Satisfaction Over the Years')
-ax.legend()
-st.pyplot(fig)
+# Gráfica de tendencias de retención
+st.subheader("📈 Retention Rate Trends Over Time")
+fig = px.line(df, x='Year', y='Retention Rate (%)', markers=True, title="Retention Rate Over the Years")
+st.plotly_chart(fig, use_container_width=True)
 
-# 4. Enrollment breakdown by department
-st.subheader("Total Enrollment by Department")
-departments = ['Engineering Enrolled', 'Business Enrolled', 'Arts Enrolled', 'Science Enrolled']
-department_totals = df[departments].sum()
-fig, ax = plt.subplots()
-department_totals.plot(kind='bar', color=['b', 'r', 'g', 'purple'], ax=ax)
-ax.set_title('Total Enrollment by Department')
-ax.set_xlabel('Department')
-ax.set_ylabel('Total Enrolled')
-st.pyplot(fig)
+# Gráfica de satisfacción estudiantil
+tab1, tab2 = st.tabs(["📊 Satisfaction Over Time", "📊 Enrollment by Department"])
 
-# 5. Spring vs. Fall term trends
-st.subheader("Comparison Between Spring vs. Fall Term Trends")
-spring_fall_comparison = df.groupby(['Year', 'Term'])[['Retention Rate (%)', 'Student Satisfaction (%)']].mean().reset_index()
-spring_fall_pivot = spring_fall_comparison.pivot(index='Year', columns='Term', values=['Retention Rate (%)', 'Student Satisfaction (%)'])
-st.write(spring_fall_pivot)
+with tab1:
+    st.subheader("😊 Student Satisfaction Over the Years")
+    fig = px.line(df, x='Year', y='Student Satisfaction (%)', markers=True, color_discrete_sequence=['green'])
+    st.plotly_chart(fig, use_container_width=True)
 
-# 6. Compare trends between departments, retention rates, and satisfaction levels
-st.subheader("Enrollment Trends by Department Over Time")
-fig, ax = plt.subplots()
-for department in departments:
-    ax.plot(df.groupby('Year')[department].sum(), marker='o', linestyle='-', label=department)
-ax.set_xlabel('Year')
-ax.set_ylabel('Enrollment')
-ax.set_title('Enrollment Trends by Department Over Time')
-ax.legend()
-st.pyplot(fig)
+with tab2:
+    st.subheader("🏫 Enrollment Breakdown by Department")
+    department_totals = df.groupby('Year')[['Engineering Enrolled', 'Business Enrolled', 'Arts Enrolled', 'Science Enrolled']].sum()
+    fig = px.bar(department_totals, x=department_totals.index, y=department_totals.columns,
+                 barmode='group', title="Enrollment Trends by Department")
+    st.plotly_chart(fig, use_container_width=True)
 
-st.subheader("Retention Rate & Student Satisfaction Over Time")
-fig, ax = plt.subplots()
-ax.plot(df.groupby('Year')['Retention Rate (%)'].mean(), marker='o', linestyle='-', label='Retention Rate', color='b')
-ax.plot(df.groupby('Year')['Student Satisfaction (%)'].mean(), marker='s', linestyle='-', label='Student Satisfaction', color='g')
-ax.set_xlabel('Year')
-ax.set_ylabel('Percentage')
-ax.set_title('Retention Rate & Student Satisfaction Over Time')
-ax.legend()
-st.pyplot(fig)
+st.markdown("---")
 
+# Comparación Spring vs. Fall
+tab3, tab4 = st.tabs(["🌸 Spring vs Fall Trends", "📌 Retention & Satisfaction Comparison"])
+
+with tab3:
+    st.subheader("📅 Spring vs. Fall Term Trends")
+    spring_fall_comparison = df.groupby(['Year', 'Term'])[['Retention Rate (%)', 'Student Satisfaction (%)']].mean().reset_index()
+    fig = px.line(spring_fall_comparison, x='Year', y=['Retention Rate (%)', 'Student Satisfaction (%)'], color='Term', markers=True)
+    st.plotly_chart(fig, use_container_width=True)
+
+with tab4:
+    st.subheader("📊 Retention Rate & Satisfaction Levels")
+    fig = px.line(df, x='Year', y=['Retention Rate (%)', 'Student Satisfaction (%)'], markers=True)
+    st.plotly_chart(fig, use_container_width=True)
+
+st.markdown("---")
+
+st.subheader("📢 Key Insights")
+st.write("- The retention rate has shown a steady trend over the years with some fluctuations.")
+st.write("- Student satisfaction levels have varied but follow a general upward trend.")
+st.write("- Enrollment in different departments exhibits interesting shifts, potentially influenced by job market trends.")
+st.write("- Spring and Fall term trends highlight key differences in student engagement and retention.")
+
+st.success("✅ This dashboard provides valuable insights for university decision-makers!")
