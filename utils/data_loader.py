@@ -8,7 +8,6 @@ from pathlib import Path
 def cargar_datos():
     """Carga y procesa los 3 datasets"""
     
-    # Detectar si estamos en local o en cloud
     base_path = Path(__file__).parent.parent / "data"
     
     archivos = {
@@ -31,10 +30,11 @@ def cargar_datos():
     if not dfs:
         return None
     
-    # Consolidar
     df = pd.concat(dfs, ignore_index=True)
     
-    # Procesar fechas
+    # ==========================================
+    # PROCESAR FECHAS
+    # ==========================================
     df['fecha'] = pd.to_datetime(df['fecha'])
     df['año'] = df['fecha'].dt.year
     df['mes'] = df['fecha'].dt.month
@@ -44,18 +44,36 @@ def cargar_datos():
     df['semana_año'] = df['fecha'].dt.isocalendar().week
     df['es_fin_semana'] = df['dia_semana'].isin(['Saturday', 'Sunday']).astype(int)
     
-    # Calcular ventas en pesos
-    if 'precio_promedio' in df.columns:
-        df['venta_pesos'] = df['cantidad_vendida_diaria'] * df['precio_promedio']
-    else:
-        # Si no hay precio, usar cantidad como proxy
-        df['venta_pesos'] = df['cantidad_vendida_diaria'] * 10000  # Precio promedio estimado
+    # ==========================================
+    # USAR VALOR_TOTAL_DIARIO (YA ESTÁ EN PESOS)
+    # ==========================================
     
-    # Limpiar nombres de productos
+    if 'valor_total_diario' in df.columns:
+        # Convertir a numérico (maneja comas como decimales)
+        df['venta_pesos'] = pd.to_numeric(
+            df['valor_total_diario'].astype(str).str.replace(',', '.'), 
+            errors='coerce'
+        )
+        
+        # Reemplazar NaN con 0
+        df['venta_pesos'] = df['venta_pesos'].fillna(0)
+        
+    else:
+        st.error("❌ Columna 'valor_total_diario' no encontrada en los datos")
+        return None
+    
+    # ==========================================
+    # LIMPIAR NOMBRES DE PRODUCTOS
+    # ==========================================
     df['producto'] = df['descripcion_producto'].str.strip().str.upper()
     
-    # Marcar eventos
-    df['tiene_evento'] = df['evento_especial'].notna().astype(int) if 'evento_especial' in df.columns else 0
+    # ==========================================
+    # EVENTOS
+    # ==========================================
+    if 'evento_especial' in df.columns:
+        df['tiene_evento'] = df['evento_especial'].notna().astype(int)
+    else:
+        df['tiene_evento'] = 0
     
     return df.sort_values('fecha').reset_index(drop=True)
 
