@@ -8,7 +8,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from utils.data_loader import cargar_datos, get_restaurante_color
-from utils.metrics import calcular_metricas_diarias
 
 st.set_page_config(page_title="Vista Diaria", page_icon="📍", layout="wide")
 
@@ -23,42 +22,56 @@ if df is None:
     st.stop()
 
 # ==========================================
-# HEADER
+# HEADER Y FILTROS
 # ==========================================
 
 st.title("📍 Vista Diaria - Análisis del Día")
 st.markdown("---")
 
-# ==========================================
-# SELECTOR DE FECHA
-# ==========================================
-
-col1, col2 = st.columns([1, 3])
+col1, col2, col3 = st.columns([2, 2, 1])
 
 with col1:
     fecha_min = df['fecha'].min().date()
     fecha_max = df['fecha'].max().date()
     
     fecha_sel = st.date_input(
-        "Selecciona una fecha",
+        "📅 Selecciona una fecha",
         value=fecha_max,
         min_value=fecha_min,
         max_value=fecha_max
     )
 
+with col2:
+    restaurantes = ['Todos'] + sorted(df['restaurante'].unique().tolist())
+    restaurante_sel = st.selectbox("🏪 Restaurante", restaurantes, index=0)
+
+with col3:
+    if restaurante_sel != 'Todos':
+        color = get_restaurante_color(restaurante_sel)
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style='background: {color}; color: white; padding: 0.5rem 1rem; 
+                    border-radius: 0.5rem; text-align: center; font-weight: 700;'>
+            📍 {restaurante_sel}
+        </div>
+        """, unsafe_allow_html=True)
+
 st.markdown("---")
 
-# ==========================================
-# MÉTRICAS DIARIAS
-# ==========================================
+# FILTRAR DATOS
+if restaurante_sel == 'Todos':
+    df_dia = df[df['fecha'] == pd.to_datetime(fecha_sel)]
+else:
+    df_dia = df[(df['fecha'] == pd.to_datetime(fecha_sel)) & (df['restaurante'] == restaurante_sel)]
 
-metricas = calcular_metricas_diarias(df, fecha_sel)
-
-if metricas is None:
-    st.warning(f"No hay datos para {fecha_sel}")
+if len(df_dia) == 0:
+    st.warning(f"No hay datos para {restaurante_sel} en {fecha_sel}")
     st.stop()
 
-# Info de la fecha
+# ==========================================
+# INFO Y MÉTRICAS
+# ==========================================
+
 dia_semana_esp = {
     'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles',
     'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo'
@@ -67,93 +80,107 @@ dia_semana_esp = {
 dia_nombre = pd.to_datetime(fecha_sel).day_name()
 st.subheader(f"📅 {dia_semana_esp[dia_nombre]}, {fecha_sel.strftime('%d de %B de %Y')}")
 
-if metricas['tiene_evento']:
+if df_dia['tiene_evento'].max() == 1:
     st.success("🎉 **Día con evento especial**")
 
 # KPIs del día
+ventas_dia = df_dia['venta_pesos'].sum()
+unidades_dia = df_dia['cantidad_vendida_diaria'].sum()
+productos_dia = df_dia['producto'].nunique()
+ticket_prom = ventas_dia / len(df_dia) if len(df_dia) > 0 else 0
+
+# Comparar con días similares
+if restaurante_sel == 'Todos':
+    df_dias_similares = df[df['dia_semana'] == dia_nombre]
+else:
+    df_dias_similares = df[(df['dia_semana'] == dia_nombre) & (df['restaurante'] == restaurante_sel)]
+
+ventas_promedio_similar = df_dias_similares.groupby('fecha')['venta_pesos'].sum().mean()
+vs_promedio = ((ventas_dia - ventas_promedio_similar) / ventas_promedio_similar * 100) if ventas_promedio_similar > 0 else 0
+
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     st.metric(
         "💰 Ventas del Día",
-        f"${metricas['ventas_totales']:,.0f}",
-        f"{metricas['vs_promedio_dia_similar']:+.1f}% vs promedio"
+        f"${ventas_dia:,.0f}",
+        f"{vs_promedio:+.1f}% vs promedio"
     )
 
 with col2:
     st.metric(
         "📦 Unidades Vendidas",
-        f"{metricas['unidades_vendidas']:,.0f}",
+        f"{unidades_dia:,.0f}",
         None
     )
 
 with col3:
     st.metric(
         "🍽️ Productos Vendidos",
-        metricas['productos_vendidos'],
+        productos_dia,
         None
     )
 
 with col4:
     st.metric(
         "🎫 Ticket Promedio",
-        f"${metricas['ticket_promedio']:,.0f}",
+        f"${ticket_prom:,.0f}",
         None
     )
 
 st.markdown("---")
 
 # ==========================================
-# VENTAS POR RESTAURANTE
+# VENTAS POR RESTAURANTE (SOLO SI "TODOS")
 # ==========================================
 
-st.header("🏪 Ventas por Restaurante")
-
-df_dia = df[df['fecha'] == pd.to_datetime(fecha_sel)]
-ventas_rest = df_dia.groupby('restaurante')['venta_pesos'].sum().sort_values(ascending=False)
-
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    fig = go.Figure(go.Bar(
-        x=ventas_rest.index,
-        y=ventas_rest.values,
-        marker=dict(
-            color=[get_restaurante_color(r) for r in ventas_rest.index]
-        ),
-        text=[f'${v:,.0f}' for v in ventas_rest.values],
-        textposition='outside'
-    ))
+if restaurante_sel == 'Todos':
+    st.header("🏪 Ventas por Restaurante")
     
-    fig.update_layout(
-        title='Ventas por Restaurante',
-        xaxis_title='',
-        yaxis_title='Ventas (COP)',
-        height=400,
-        showlegend=False
-    )
+    ventas_rest = df_dia.groupby('restaurante')['venta_pesos'].sum().sort_values(ascending=False)
     
-    st.plotly_chart(fig, use_container_width=True)
-
-with col2:
-    st.subheader("Detalle")
+    col1, col2 = st.columns([2, 1])
     
-    for rest, venta in ventas_rest.items():
-        porcentaje = (venta / ventas_rest.sum()) * 100
-        color = get_restaurante_color(rest)
+    with col1:
+        fig = go.Figure(go.Bar(
+            x=ventas_rest.index,
+            y=ventas_rest.values,
+            marker=dict(
+                color=[get_restaurante_color(r) for r in ventas_rest.index]
+            ),
+            text=[f'${v:,.0f}' for v in ventas_rest.values],
+            textposition='outside'
+        ))
         
-        emoji = "🥇" if rest == ventas_rest.index[0] else "🥈" if rest == ventas_rest.index[1] else "🥉"
+        fig.update_layout(
+            title='Ventas por Restaurante',
+            xaxis_title='',
+            yaxis_title='Ventas (COP)',
+            height=400,
+            showlegend=False
+        )
         
-        st.markdown(f"""
-        <div style='background: {color}20; padding: 1rem; border-radius: 0.5rem; 
-                    margin-bottom: 0.5rem; border-left: 4px solid {color};'>
-            <div style='font-size: 1.2rem;'>{emoji} <strong>{rest}</strong></div>
-            <div style='font-size: 1.5rem; font-weight: 700;'>${venta:,.0f}</div>
-            <div style='font-size: 0.9rem; color: #666;'>{porcentaje:.1f}%</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-st.markdown("---")
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        st.subheader("Detalle")
+        
+        for i, (rest, venta) in enumerate(ventas_rest.items(), 1):
+            porcentaje = (venta / ventas_rest.sum()) * 100
+            color = get_restaurante_color(rest)
+            
+            emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉"
+            
+            st.markdown(f"""
+            <div style='background: {color}20; padding: 1rem; border-radius: 0.5rem; 
+                        margin-bottom: 0.5rem; border-left: 4px solid {color};'>
+                <div style='font-size: 1.2rem;'>{emoji} <strong>{rest}</strong></div>
+                <div style='font-size: 1.5rem; font-weight: 700;'>${venta:,.0f}</div>
+                <div style='font-size: 0.9rem; color: #666;'>{porcentaje:.1f}%</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    st.markdown("---")
 
 # ==========================================
 # PRODUCTOS DEL DÍA
@@ -161,7 +188,7 @@ st.markdown("---")
 
 st.header("📋 Productos Vendidos")
 
-productos_dia = df_dia.groupby('producto').agg({
+productos_dia_data = df_dia.groupby('producto').agg({
     'cantidad_vendida_diaria': 'sum',
     'venta_pesos': 'sum'
 }).sort_values('venta_pesos', ascending=False)
@@ -171,7 +198,7 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("🏆 Top 5 por Ventas")
     
-    top_5_ventas = productos_dia.head(5)
+    top_5_ventas = productos_dia_data.head(5)
     
     for i, (producto, row) in enumerate(top_5_ventas.iterrows(), 1):
         st.markdown(f"""
@@ -186,7 +213,7 @@ with col1:
 with col2:
     st.subheader("📦 Top 5 por Cantidad")
     
-    top_5_cantidad = productos_dia.sort_values('cantidad_vendida_diaria', ascending=False).head(5)
+    top_5_cantidad = productos_dia_data.sort_values('cantidad_vendida_diaria', ascending=False).head(5)
     
     for i, (producto, row) in enumerate(top_5_cantidad.iterrows(), 1):
         st.markdown(f"""
@@ -206,11 +233,7 @@ st.markdown("---")
 
 st.header("📊 Comparación con Días Similares")
 
-# Últimos 4 días del mismo día de semana
-df_mismo_dia = df[df['dia_semana'] == dia_nombre].copy()
-df_mismo_dia = df_mismo_dia.sort_values('fecha', ascending=False).head(5)
-
-ventas_mismo_dia = df_mismo_dia.groupby('fecha')['venta_pesos'].sum().sort_index()
+ventas_mismo_dia = df_dias_similares.groupby('fecha')['venta_pesos'].sum().sort_index().tail(5)
 
 fig = go.Figure()
 
@@ -223,7 +246,6 @@ fig.add_trace(go.Scatter(
     marker=dict(size=10)
 ))
 
-# Marcar el día seleccionado
 if pd.to_datetime(fecha_sel) in ventas_mismo_dia.index:
     venta_sel = ventas_mismo_dia[pd.to_datetime(fecha_sel)]
     fig.add_trace(go.Scatter(
@@ -244,13 +266,9 @@ fig.update_layout(
 
 st.plotly_chart(fig, use_container_width=True)
 
-# ==========================================
-# INSIGHT
-# ==========================================
-
 promedio_similares = ventas_mismo_dia.mean()
-diferencia = metricas['ventas_totales'] - promedio_similares
-porcentaje_dif = (diferencia / promedio_similares) * 100
+diferencia = ventas_dia - promedio_similares
+porcentaje_dif = (diferencia / promedio_similares) * 100 if promedio_similares > 0 else 0
 
 if porcentaje_dif > 10:
     st.success(f"""
