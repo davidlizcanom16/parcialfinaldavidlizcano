@@ -8,35 +8,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from utils.data_loader import cargar_datos, get_restaurante_color
-from utils.metrics import calcular_metricas_mensuales
 
 st.set_page_config(page_title="Vista Mensual", page_icon="📆", layout="wide")
-
-# ==========================================
-# ESTILOS
-# ==========================================
-
-st.markdown("""
-<style>
-    .month-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 2rem;
-        border-radius: 1rem;
-        text-align: center;
-    }
-    .delta-positive {
-        color: #43e97b;
-        font-size: 1.5rem;
-        font-weight: 700;
-    }
-    .delta-negative {
-        color: #f5576c;
-        font-size: 1.5rem;
-        font-weight: 700;
-    }
-</style>
-""", unsafe_allow_html=True)
 
 # ==========================================
 # CARGAR DATOS
@@ -49,39 +22,63 @@ if df is None:
     st.stop()
 
 # ==========================================
-# HEADER
+# HEADER Y FILTROS
 # ==========================================
 
 st.title("📆 Vista Mensual - Análisis Detallado")
 st.markdown("---")
 
-# ==========================================
-# SELECTORES
-# ==========================================
-
-col1, col2, col3 = st.columns([1, 1, 2])
+col1, col2, col3, col4 = st.columns([1, 1, 2, 1])
 
 with col1:
     años = sorted(df['año'].unique(), reverse=True)
-    año_sel = st.selectbox("Año", años, index=0)
+    año_sel = st.selectbox("📅 Año", años, index=0)
 
 with col2:
     meses_disponibles = sorted(df[df['año'] == año_sel]['mes'].unique(), reverse=True)
-    mes_sel = st.selectbox("Mes", meses_disponibles, index=0)
+    mes_sel = st.selectbox("📆 Mes", meses_disponibles, index=0)
+
+with col3:
+    restaurantes = ['Todos'] + sorted(df['restaurante'].unique().tolist())
+    restaurante_sel = st.selectbox("🏪 Restaurante", restaurantes, index=0)
+
+with col4:
+    if restaurante_sel != 'Todos':
+        color = get_restaurante_color(restaurante_sel)
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style='background: {color}; color: white; padding: 0.5rem 1rem; 
+                    border-radius: 0.5rem; text-align: center; font-weight: 700;'>
+            📍 {restaurante_sel}
+        </div>
+        """, unsafe_allow_html=True)
 
 st.markdown("---")
 
-# ==========================================
-# MÉTRICAS MENSUALES
-# ==========================================
+# FILTRAR DATOS
+if restaurante_sel == 'Todos':
+    df_mes = df[(df['año'] == año_sel) & (df['mes'] == mes_sel)]
+else:
+    df_mes = df[(df['año'] == año_sel) & (df['mes'] == mes_sel) & (df['restaurante'] == restaurante_sel)]
 
-metricas = calcular_metricas_mensuales(df, año_sel, mes_sel)
-
-if metricas is None:
-    st.warning("No hay datos para este mes")
+if len(df_mes) == 0:
+    st.warning(f"No hay datos para {restaurante_sel} en este mes")
     st.stop()
 
-# Nombre del mes
+# Mes anterior para comparación
+if mes_sel > 1:
+    df_mes_anterior = df[(df['año'] == año_sel) & (df['mes'] == mes_sel - 1)]
+    if restaurante_sel != 'Todos':
+        df_mes_anterior = df_mes_anterior[df_mes_anterior['restaurante'] == restaurante_sel]
+else:
+    df_mes_anterior = df[(df['año'] == año_sel - 1) & (df['mes'] == 12)]
+    if restaurante_sel != 'Todos':
+        df_mes_anterior = df_mes_anterior[df_mes_anterior['restaurante'] == restaurante_sel]
+
+# ==========================================
+# MÉTRICAS
+# ==========================================
+
 meses_nombres = {
     1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
     5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
@@ -90,38 +87,43 @@ meses_nombres = {
 
 st.header(f"📊 {meses_nombres[mes_sel]} {año_sel}")
 
-# KPIs con comparación
+ventas_mes = df_mes['venta_pesos'].sum()
+ventas_anterior = df_mes_anterior['venta_pesos'].sum()
+cambio = ((ventas_mes - ventas_anterior) / ventas_anterior * 100) if ventas_anterior > 0 else 0
+
+dias_operacion = df_mes['fecha'].nunique()
+ventas_prom_dia = df_mes.groupby('fecha')['venta_pesos'].sum().mean()
+
+# Mejor día semana
+mejor_dia_sem = df_mes.groupby('dia_semana')['venta_pesos'].sum().idxmax()
+
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    cambio = metricas['cambio_vs_anterior']
-    delta_class = 'delta-positive' if cambio > 0 else 'delta-negative'
-    emoji = "📈" if cambio > 0 else "📉"
-    
     st.metric(
         "💰 Ventas del Mes",
-        f"${metricas['ventas_totales']:,.0f}",
+        f"${ventas_mes:,.0f}",
         f"{cambio:+.1f}% vs mes anterior"
     )
 
 with col2:
     st.metric(
         "📅 Días Operación",
-        metricas['dias_operacion'],
+        dias_operacion,
         None
     )
 
 with col3:
     st.metric(
         "📈 Venta Prom/Día",
-        f"${metricas['ventas_promedio_dia']:,.0f}",
+        f"${ventas_prom_dia:,.0f}",
         None
     )
 
 with col4:
     st.metric(
         "🏆 Mejor Día Semana",
-        metricas['mejor_dia_semana'],
+        mejor_dia_sem,
         None
     )
 
@@ -133,7 +135,6 @@ st.markdown("---")
 
 st.header("📈 Evolución Diaria del Mes")
 
-df_mes = df[(df['año'] == año_sel) & (df['mes'] == mes_sel)]
 ventas_diarias = df_mes.groupby('fecha')['venta_pesos'].sum().reset_index()
 
 fig = px.line(
@@ -145,7 +146,6 @@ fig = px.line(
     markers=True
 )
 
-# Línea de promedio
 promedio = ventas_diarias['venta_pesos'].mean()
 fig.add_hline(
     y=promedio,
@@ -163,12 +163,14 @@ st.plotly_chart(fig, use_container_width=True)
 # MEJORES Y PEORES DÍAS
 # ==========================================
 
+mejor_fecha = ventas_diarias.loc[ventas_diarias['venta_pesos'].idxmax(), 'fecha']
+peor_fecha = ventas_diarias.loc[ventas_diarias['venta_pesos'].idxmin(), 'fecha']
+venta_mejor = ventas_diarias['venta_pesos'].max()
+venta_peor = ventas_diarias['venta_pesos'].min()
+
 col1, col2 = st.columns(2)
 
 with col1:
-    mejor_fecha = metricas['mejor_dia']
-    venta_mejor = ventas_diarias[ventas_diarias['fecha'] == mejor_fecha]['venta_pesos'].values[0]
-    
     st.markdown(f"""
     <div style='background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); 
                 color: white; padding: 1.5rem; border-radius: 1rem; text-align: center;'>
@@ -179,9 +181,6 @@ with col1:
     """, unsafe_allow_html=True)
 
 with col2:
-    peor_fecha = metricas['peor_dia']
-    venta_peor = ventas_diarias[ventas_diarias['fecha'] == peor_fecha]['venta_pesos'].values[0]
-    
     st.markdown(f"""
     <div style='background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
                 color: white; padding: 1.5rem; border-radius: 1rem; text-align: center;'>
@@ -194,44 +193,45 @@ with col2:
 st.markdown("---")
 
 # ==========================================
-# PERFORMANCE POR RESTAURANTE
+# PERFORMANCE POR RESTAURANTE (SOLO SI "TODOS")
 # ==========================================
 
-st.header("🏪 Performance por Restaurante")
-
-ventas_rest = df_mes.groupby('restaurante')['venta_pesos'].sum().sort_values(ascending=False)
-
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    fig = px.pie(
-        values=ventas_rest.values,
-        names=ventas_rest.index,
-        title='Distribución de Ventas por Restaurante',
-        color=ventas_rest.index,
-        color_discrete_map={r: get_restaurante_color(r) for r in ventas_rest.index},
-        hole=0.4
-    )
-    fig.update_traces(textposition='inside', textinfo='percent+label')
-    fig.update_layout(height=400)
-    st.plotly_chart(fig, use_container_width=True)
-
-with col2:
-    st.subheader("Ventas del Mes")
-    for rest, venta in ventas_rest.items():
-        color = get_restaurante_color(rest)
-        porcentaje = (venta / ventas_rest.sum()) * 100
-        
-        st.markdown(f"""
-        <div style='background: {color}20; padding: 1rem; border-radius: 0.5rem; 
-                    margin-bottom: 0.5rem; border-left: 4px solid {color};'>
-            <div style='font-weight: 600;'>{rest}</div>
-            <div style='font-size: 1.3rem; font-weight: 700;'>${venta:,.0f}</div>
-            <div style='font-size: 0.9rem; color: #666;'>{porcentaje:.1f}%</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-st.markdown("---")
+if restaurante_sel == 'Todos':
+    st.header("🏪 Performance por Restaurante")
+    
+    ventas_rest = df_mes.groupby('restaurante')['venta_pesos'].sum().sort_values(ascending=False)
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        fig = px.pie(
+            values=ventas_rest.values,
+            names=ventas_rest.index,
+            title='Distribución de Ventas por Restaurante',
+            color=ventas_rest.index,
+            color_discrete_map={r: get_restaurante_color(r) for r in ventas_rest.index},
+            hole=0.4
+        )
+        fig.update_traces(textposition='inside', textinfo='percent+label')
+        fig.update_layout(height=400)
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        st.subheader("Ventas del Mes")
+        for rest, venta in ventas_rest.items():
+            color = get_restaurante_color(rest)
+            porcentaje = (venta / ventas_rest.sum()) * 100
+            
+            st.markdown(f"""
+            <div style='background: {color}20; padding: 1rem; border-radius: 0.5rem; 
+                        margin-bottom: 0.5rem; border-left: 4px solid {color};'>
+                <div style='font-weight: 600;'>{rest}</div>
+                <div style='font-size: 1.3rem; font-weight: 700;'>${venta:,.0f}</div>
+                <div style='font-size: 0.9rem; color: #666;'>{porcentaje:.1f}%</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    st.markdown("---")
 
 # ==========================================
 # TOP 5 PRODUCTOS DEL MES
@@ -239,7 +239,7 @@ st.markdown("---")
 
 st.header("⭐ Top 5 Productos del Mes")
 
-top_5 = metricas['top_3_productos'].head(5)
+top_5 = df_mes.groupby('producto')['venta_pesos'].sum().nlargest(5)
 
 fig = go.Figure(go.Bar(
     x=top_5.values,
@@ -274,7 +274,6 @@ st.header("💡 Insights del Mes")
 col1, col2 = st.columns(2)
 
 with col1:
-    # Análisis de fines de semana
     ventas_fds = df_mes[df_mes['es_fin_semana'] == 1]['venta_pesos'].sum()
     ventas_semana = df_mes[df_mes['es_fin_semana'] == 0]['venta_pesos'].sum()
     
@@ -290,7 +289,6 @@ with col1:
         """)
 
 with col2:
-    # Variabilidad
     std_ventas = ventas_diarias['venta_pesos'].std()
     cv = (std_ventas / ventas_diarias['venta_pesos'].mean()) * 100
     
