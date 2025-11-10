@@ -173,33 +173,3 @@ fig = px.bar(
 fig.update_layout(showlegend=False, height=400)
 st.plotly_chart(fig, use_container_width=True)
 ```
-
----
-
-## 📂 **PASO 6: ¿DÓNDE PONER LOS DATASETS?**
-
-**OPCIÓN A: Subir a GitHub** (si son < 25MB cada uno)
-```
-data/
-├── dataset_lemeridiem_DIARIO.xlsx
-├── dataset_sabina_DIARIO.xlsx
-└── dataset_principal_DIARIO.xlsx
-```
-
-**OPCIÓN B: NO subirlos** (si son muy grandes)
-- Sube solo 1 archivo pequeño de ejemplo
-- En README explica que hay que poner los 3 archivos en `/data/`
-
----
-
-## ✅ **CHECKLIST FINAL:**
-```
-☑️  requirements.txt
-☑️  .gitignore
-☑️  app.py
-☑️  utils/__init__.py
-☑️  utils/data_loader.py
-☑️  utils/metrics.py
-☑️  pages/ (vacía por ahora - añadiremos páginas después)
-☑️  data/ con los 3 Excel
-☑️  README.md
