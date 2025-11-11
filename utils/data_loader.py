@@ -1,12 +1,11 @@
-# utils/data_loader.py - VERSIÓN CSV
+# utils/data_loader.py - VERSIÓN CORREGIDA
 import pandas as pd
 import streamlit as st
-import numpy as np
 from pathlib import Path
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def cargar_datos():
-    """Carga y procesa los 3 datasets desde CSV"""
+    """Carga datos desde CSV - USA CÓDIGO COMO IDENTIFICADOR"""
     
     base_path = Path(__file__).parent.parent / "data"
     
@@ -26,26 +25,11 @@ def cargar_datos():
             progress_bar.progress(idx / total_archivos, 
                                 text=f"🔄 Cargando {nombre}... ({idx}/{total_archivos})")
             
-            # Leer CSV (mucho más compatible que Excel)
-            df = pd.read_csv(archivo)
-            
-            # Convertir fecha
-            df['fecha'] = pd.to_datetime(df['fecha'])
-            
-            # Verificar columnas
-            columnas_requeridas = ['fecha', 'codigo_producto', 'descripcion_producto', 
-                                  'cantidad_vendida_diaria', 'valor_total_diario']
-            
-            columnas_faltantes = [col for col in columnas_requeridas if col not in df.columns]
-            
-            if columnas_faltantes:
-                st.error(f"❌ {nombre}: Faltan columnas: {columnas_faltantes}")
-                continue
+            # Leer CSV
+            df = pd.read_csv(archivo, parse_dates=['fecha'])
             
             df['restaurante'] = nombre
             dfs.append(df)
-            
-            st.sidebar.success(f"✅ {nombre}: {len(df):,} registros")
             
         except Exception as e:
             st.error(f"❌ Error cargando {nombre}: {str(e)}")
@@ -56,10 +40,10 @@ def cargar_datos():
     if not dfs:
         return None
     
-    # Consolidar
     df = pd.concat(dfs, ignore_index=True)
     
-    # Procesar
+    # Procesar fechas
+    df['fecha'] = pd.to_datetime(df['fecha'])
     df['año'] = df['fecha'].dt.year
     df['mes'] = df['fecha'].dt.month
     df['mes_nombre'] = df['fecha'].dt.strftime('%B')
@@ -68,9 +52,23 @@ def cargar_datos():
     df['semana_año'] = df['fecha'].dt.isocalendar().week
     df['es_fin_semana'] = df['dia_semana'].isin(['Saturday', 'Sunday']).astype(int)
     
-    df['venta_pesos'] = df['valor_total_diario']
-    df['producto'] = df['descripcion_producto'].str.strip().str.upper()
+    # ==========================================
+    # CRÍTICO: CONSOLIDAR DESCRIPCIONES POR CÓDIGO
+    # ==========================================
     
+    # Para cada código, tomar la descripción más reciente
+    descripcion_por_codigo = df.sort_values('fecha', ascending=False).groupby('codigo_producto')['descripcion_producto'].first()
+    
+    # Mapear descripciones consolidadas
+    df['descripcion_consolidada'] = df['codigo_producto'].map(descripcion_por_codigo)
+    
+    # USAR DESCRIPCIÓN CONSOLIDADA como "producto"
+    df['producto'] = df['descripcion_consolidada'].str.strip().str.upper()
+    
+    # Columna de ventas
+    df['venta_pesos'] = df['valor_total_diario']
+    
+    # Eventos
     if 'evento_especial' in df.columns:
         df['tiene_evento'] = df['evento_especial'].notna().astype(int)
     else:
@@ -102,3 +100,17 @@ def formatear_numero(numero, tipo='moneda'):
         return f"{numero:,.0f}"
     else:
         return str(numero)
+
+
+@st.cache_data(ttl=3600)
+def get_metricas_generales(df):
+    """Calcula métricas generales (cacheado)"""
+    return {
+        'ventas_totales': df['venta_pesos'].sum(),
+        'unidades_totales': df['cantidad_vendida_diaria'].sum(),
+        'productos_unicos': df['codigo_producto'].nunique(),  # ← USAR CÓDIGO
+        'dias_operacion': df['fecha'].nunique(),
+        'restaurantes': df['restaurante'].unique().tolist(),
+        'fecha_min': df['fecha'].min(),
+        'fecha_max': df['fecha'].max()
+    }
