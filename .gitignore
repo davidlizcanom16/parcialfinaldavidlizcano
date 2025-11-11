@@ -18,3 +18,15 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+# Verificar .gitignore
+cat .gitignore
+
+# Si tiene algo como:
+# *.csv
+# data/
+
+# QUÍTALO o agrega excepción:
+echo "!data/*.csv" >> .gitignore
+git add .gitignore
+git commit -m "Permitir CSV en data/"
+git push
