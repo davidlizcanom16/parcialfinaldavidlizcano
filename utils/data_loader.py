@@ -1,12 +1,12 @@
-# utils/data_loader.py
+# utils/data_loader.py - VERSIÓN CORREGIDA PARA STREAMLIT CLOUD
 import pandas as pd
 import streamlit as st
 import numpy as np
 from pathlib import Path
 
-@st.cache_data
+@st.cache_data(ttl=3600, show_spinner=False)
 def cargar_datos():
-    """Carga y procesa los 3 datasets"""
+    """Carga y procesa los 3 datasets - CON ENGINE EXPLÍCITO"""
     
     base_path = Path(__file__).parent.parent / "data"
     
@@ -18,24 +18,70 @@ def cargar_datos():
     
     dfs = []
     
-    for nombre, archivo in archivos.items():
+    # Progress bar
+    progress_bar = st.progress(0, text="🔄 Cargando datos...")
+    total_archivos = len(archivos)
+    
+    for idx, (nombre, archivo) in enumerate(archivos.items(), 1):
         try:
-            df = pd.read_excel(archivo)
+            progress_bar.progress(idx / total_archivos, 
+                                text=f"🔄 Cargando {nombre}... ({idx}/{total_archivos})")
+            
+            # SOLUCIÓN: Especificar engine explícitamente
+            # Intentar primero con openpyxl (más común)
+            try:
+                df = pd.read_excel(archivo, engine='openpyxl')
+            except Exception as e1:
+                st.warning(f"⚠️ openpyxl falló para {nombre}, intentando xlrd...")
+                try:
+                    df = pd.read_excel(archivo, engine='xlrd')
+                except Exception as e2:
+                    st.error(f"❌ Error con ambos engines para {nombre}")
+                    st.error(f"   openpyxl: {str(e1)[:100]}")
+                    st.error(f"   xlrd: {str(e2)[:100]}")
+                    continue
+            
+            # Verificar que el DataFrame no esté vacío
+            if df is None or len(df) == 0:
+                st.error(f"❌ {nombre}: DataFrame vacío")
+                continue
+            
+            # Verificar columnas críticas
+            columnas_requeridas = ['fecha', 'codigo_producto', 'descripcion_producto', 
+                                  'cantidad_vendida_diaria', 'valor_total_diario']
+            columnas_faltantes = [col for col in columnas_requeridas if col not in df.columns]
+            
+            if columnas_faltantes:
+                st.error(f"❌ {nombre}: Faltan columnas: {columnas_faltantes}")
+                st.info(f"   Columnas disponibles: {df.columns.tolist()[:10]}")
+                continue
+            
+            # Agregar restaurante
             df['restaurante'] = nombre
+            
+            # Convertir fecha
+            df['fecha'] = pd.to_datetime(df['fecha'])
+            
             dfs.append(df)
+            
+            st.sidebar.success(f"✅ {nombre}: {len(df):,} registros")
+            
         except Exception as e:
-            st.error(f"❌ Error cargando {archivo.name}: {e}")
-            return None
+            st.error(f"❌ Error cargando {nombre}: {str(e)}")
+            st.error(f"   Archivo: {archivo}")
+            st.error(f"   ¿Existe?: {archivo.exists()}")
+            continue
+    
+    progress_bar.empty()
     
     if not dfs:
+        st.error("❌ No se pudieron cargar NINGÚN dataset")
         return None
     
+    # Consolidar
     df = pd.concat(dfs, ignore_index=True)
     
-    # ==========================================
-    # PROCESAR FECHAS
-    # ==========================================
-    df['fecha'] = pd.to_datetime(df['fecha'])
+    # Procesar fechas
     df['año'] = df['fecha'].dt.year
     df['mes'] = df['fecha'].dt.month
     df['mes_nombre'] = df['fecha'].dt.strftime('%B')
@@ -44,32 +90,11 @@ def cargar_datos():
     df['semana_año'] = df['fecha'].dt.isocalendar().week
     df['es_fin_semana'] = df['dia_semana'].isin(['Saturday', 'Sunday']).astype(int)
     
-    # ==========================================
-    # USAR VALOR_TOTAL_DIARIO (YA ESTÁ EN PESOS)
-    # ==========================================
-    
-    if 'valor_total_diario' in df.columns:
-        # Convertir a numérico (maneja comas como decimales)
-        df['venta_pesos'] = pd.to_numeric(
-            df['valor_total_diario'].astype(str).str.replace(',', '.'), 
-            errors='coerce'
-        )
-        
-        # Reemplazar NaN con 0
-        df['venta_pesos'] = df['venta_pesos'].fillna(0)
-        
-    else:
-        st.error("❌ Columna 'valor_total_diario' no encontrada en los datos")
-        return None
-    
-    # ==========================================
-    # LIMPIAR NOMBRES DE PRODUCTOS
-    # ==========================================
+    # Renombrar
+    df['venta_pesos'] = df['valor_total_diario']
     df['producto'] = df['descripcion_producto'].str.strip().str.upper()
     
-    # ==========================================
-    # EVENTOS
-    # ==========================================
+    # Eventos
     if 'evento_especial' in df.columns:
         df['tiene_evento'] = df['evento_especial'].notna().astype(int)
     else:
@@ -89,7 +114,7 @@ def get_restaurante_color(restaurante):
 
 
 def formatear_numero(numero, tipo='moneda'):
-    """Formatea números para display"""
+    """Formatea números"""
     if pd.isna(numero):
         return 'N/A'
     
