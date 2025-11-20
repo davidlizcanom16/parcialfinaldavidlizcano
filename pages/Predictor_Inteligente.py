@@ -253,81 +253,209 @@ if entrenar:
         try:
             # 1. Feature Engineering
             status_text.text("🔧 Creando features...")
+            progress_bar.progress(10)
+            
+            # Mostrar info inicial
+            st.info(f"📊 **Datos originales:** {len(df_producto)} días")
+            
+            # Crear features
+            df_features = create_all_features(df_producto)
+            
+            st.info(f"📊 **Después de crear features:** {len(df_features)} días")
+            
             progress_bar.progress(20)
             
-            df_features = create_all_features(df_producto)
-            df_features = df_features.dropna()
+            # CAMBIO CRÍTICO: Dropna SOLO en columnas esenciales
+            status_text.text("🧹 Limpiando datos...")
             
-            if len(df_features) < 50:
-                st.error("❌ No hay suficientes datos (mínimo 50 días)")
-                st.stop()
+            # Verificar qué columnas existen
+            essential_cols = ['cantidad_vendida_diaria']
             
-            # 2. Split
-            status_text.text("📊 Dividiendo datos...")
+            # Agregar lag_1 y lag_7 si existen
+            if 'lag_1' in df_features.columns:
+                essential_cols.append('lag_1')
+            if 'lag_7' in df_features.columns:
+                essential_cols.append('lag_7')
+            
+            st.write(f"🔍 Verificando columnas esenciales: {essential_cols}")
+            
+            # Contar NaN ANTES de limpiar
+            nan_before = df_features[essential_cols].isna().sum()
+            st.write("**NaN en columnas esenciales (antes):**")
+            st.write(nan_before)
+            
+            # Dropna SOLO en columnas esenciales
+            df_clean = df_features.dropna(subset=essential_cols).copy()
+            
+            st.info(f"📊 **Después de eliminar NaN en esenciales:** {len(df_clean)} días")
+            
+            progress_bar.progress(25)
+            
+            # Rellenar NaN en el resto de columnas
+            status_text.text("🔄 Rellenando valores faltantes...")
+            
+            # Forward fill, luego backward fill, luego 0
+            df_clean = df_clean.fillna(method='ffill').fillna(method='bfill').fillna(0)
+            
+            # Verificar que no queden NaN
+            remaining_nan = df_clean.isna().sum().sum()
+            st.success(f"✅ **Datos finales limpios:** {len(df_clean)} días (NaN restantes: {remaining_nan})")
+            
             progress_bar.progress(30)
             
-            split_idx = int(len(df_features) * train_val_split / 100)
-            df_train = df_features[:split_idx].copy()
-            df_test = df_features[split_idx:].copy()
+            # Verificar cantidad mínima
+            if len(df_clean) < 50:
+                st.error(f"❌ **Insuficientes datos después de limpieza**")
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Días originales", len(df_producto))
+                with col2:
+                    st.metric("Días con features", len(df_features))
+                with col3:
+                    st.metric("Días finales", len(df_clean))
+                
+                with st.expander("🔍 Diagnóstico Detallado"):
+                    st.write("**¿Dónde se perdieron los datos?**")
+                    st.write(f"- Pérdida en feature engineering: {len(df_producto) - len(df_features)} días")
+                    st.write(f"- Pérdida en limpieza de NaN: {len(df_features) - len(df_clean)} días")
+                    
+                    st.write("\n**Primeros 20 registros (con NaN):**")
+                    st.dataframe(df_features[essential_cols].head(20))
+                    
+                    st.write("\n**Estadísticas de NaN por columna:**")
+                    nan_stats = df_features.isna().sum().sort_values(ascending=False)
+                    st.dataframe(nan_stats[nan_stats > 0])
+                
+                st.stop()
             
-            # Features
+            df_features = df_clean
+            
+            # 2. Preparar features y target
+            status_text.text("📊 Preparando features...")
+            progress_bar.progress(35)
+            
             feature_cols = get_feature_columns()
-            feature_cols = [col for col in feature_cols if col in df_train.columns]
             
-            X_train = df_train[feature_cols].fillna(0)
-            y_train = df_train['cantidad_vendida_diaria']
-            X_test = df_test[feature_cols].fillna(0)
-            y_test = df_test['cantidad_vendida_diaria']
+            # Verificar que existan
+            feature_cols = [col for col in feature_cols if col in df_features.columns]
             
-            # 3. Entrenar
-            status_text.text(f"🤖 Entrenando XGBoost ({n_trials} trials)...")
+            st.info(f"🔧 **Features seleccionadas:** {len(feature_cols)}")
+            
+            # Asegurar que no hay NaN
+            X = df_features[feature_cols].fillna(0)
+            y = df_features['cantidad_vendida_diaria']
+            
+            st.success(f"✅ **X shape:** {X.shape}, **y shape:** {y.shape}")
+            
             progress_bar.progress(40)
             
-            # Split interno
+            # 3. Split temporal
+            status_text.text("✂️ Dividiendo datos...")
+            
+            split_idx = int(len(X) * train_val_split / 100)
+            
+            X_train = X[:split_idx]
+            y_train = y[:split_idx]
+            X_test = X[split_idx:]
+            y_test = y[split_idx:]
+            
+            st.info(f"📊 **Train:** {len(X_train)} días | **Test:** {len(X_test)} días")
+            
+            progress_bar.progress(45)
+            
+            # 4. Split interno para validación
+            status_text.text("🔀 Creando conjunto de validación...")
+            
             val_split = int(len(X_train) * 0.8)
             X_train_inner = X_train[:val_split]
             y_train_inner = y_train[:val_split]
             X_val = X_train[val_split:]
             y_val = y_train[val_split:]
             
+            st.info(f"📊 **Train interno:** {len(X_train_inner)} | **Val:** {len(X_val)}")
+            
+            progress_bar.progress(50)
+            
+            # 5. Entrenar modelo
+            status_text.text(f"🤖 Entrenando XGBoost ({n_trials} trials)...")
+            
             predictor = XGBoostPredictor(n_trials=n_trials, confidence_level=0.95)
             predictor.train(X_train_inner, y_train_inner, X_val, y_val)
             
+            st.success("✅ **Modelo principal entrenado**")
+            
             progress_bar.progress(70)
             
-            # 4. Predecir en test
-            status_text.text("🎯 Evaluando...")
+            # 6. Predecir en test
+            status_text.text("🎯 Evaluando en test...")
+            
             y_pred_test, y_pred_test_lower, y_pred_test_upper = predictor.predict(X_test, return_intervals=True)
             
             progress_bar.progress(80)
             
-            # 5. Predicción futura
-            status_text.text("🔮 Prediciendo futuro...")
+            # 7. Preparar predicción futura
+            status_text.text("🔮 Preparando predicción futura...")
             
             last_date = df_producto['fecha'].max()
             future_dates = pd.date_range(start=last_date + timedelta(days=1), periods=horizonte, freq='D')
             
-            df_future = pd.DataFrame({'fecha': future_dates})
-            df_future['cantidad_vendida_diaria'] = df_producto['cantidad_vendida_diaria'].tail(30).mean()
+            # Crear dataframe futuro
+            df_future = pd.DataFrame({
+                'fecha': future_dates,
+                'cantidad_vendida_diaria': df_producto['cantidad_vendida_diaria'].tail(30).mean()
+            })
+            
+            # Aplicar feature engineering
             df_future = create_all_features(df_future)
             
-            X_future = df_future[feature_cols].fillna(method='ffill').fillna(0)
-            y_pred_future, y_pred_future_lower, y_pred_future_upper = predictor.predict(X_future[:horizonte], return_intervals=True)
+            # Asegurar que tenga todas las features
+            for col in feature_cols:
+                if col not in df_future.columns:
+                    df_future[col] = 0
+            
+            # Rellenar NaN
+            df_future = df_future.fillna(method='ffill').fillna(method='bfill').fillna(0)
+            
+            X_future = df_future[feature_cols].fillna(0)
+            
+            progress_bar.progress(85)
+            
+            # 8. Predecir futuro
+            status_text.text("🎯 Generando predicciones futuras...")
+            
+            y_pred_future, y_pred_future_lower, y_pred_future_upper = predictor.predict(
+                X_future[:horizonte], 
+                return_intervals=True
+            )
             
             progress_bar.progress(90)
             
-            # 6. Métricas
+            # 9. Calcular métricas
+            status_text.text("📊 Calculando métricas...")
+            
             metrics = calculate_metrics(y_test.values, y_pred_test)
             
-            # 7. Alertas
+            progress_bar.progress(95)
+            
+            # 10. Generar alertas
+            status_text.text("🚨 Generando alertas...")
+            
             historical_mean = df_producto['cantidad_vendida_diaria'].mean()
             historical_std = df_producto['cantidad_vendida_diaria'].std()
-            alerts = generate_alerts(y_pred_future, y_pred_future_lower, y_pred_future_upper, historical_mean, historical_std)
+            
+            alerts = generate_alerts(
+                y_pred_future, 
+                y_pred_future_lower, 
+                y_pred_future_upper, 
+                historical_mean, 
+                historical_std
+            )
             
             progress_bar.progress(100)
             status_text.text("✅ ¡Completado!")
             
-            # Guardar en session_state
+            # 11. Guardar en session_state
             st.session_state.update({
                 'predictor': predictor,
                 'metrics': metrics,
@@ -335,7 +463,7 @@ if entrenar:
                 'y_pred_test': y_pred_test,
                 'y_pred_test_lower': y_pred_test_lower,
                 'y_pred_test_upper': y_pred_test_upper,
-                'df_test': df_test,
+                'df_test': df_features[split_idx:].copy(),
                 'future_dates': future_dates,
                 'y_pred_future': y_pred_future,
                 'y_pred_future_lower': y_pred_future_lower,
@@ -348,13 +476,14 @@ if entrenar:
             progress_bar.empty()
             status_text.empty()
             
-            st.success("✅ ¡Modelo entrenado exitosamente!")
+            st.success("✅ **¡Modelo entrenado exitosamente!**")
+            st.balloons()
             st.rerun()
             
         except Exception as e:
-            st.error(f"❌ Error: {str(e)}")
+            st.error(f"❌ **Error durante el entrenamiento:** {str(e)}")
             import traceback
-            with st.expander("Ver detalles del error"):
+            with st.expander("🔍 Ver detalles técnicos del error"):
                 st.code(traceback.format_exc())
 
 # ==========================================
