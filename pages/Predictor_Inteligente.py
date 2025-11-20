@@ -103,6 +103,20 @@ st.divider()
 
 st.sidebar.header("⚙️ Configuración del Predictor")
 
+# Verificar columnas disponibles
+columnas_posibles = ['producto', 'descripcion_producto', 'nombre_producto', 'codigo_producto']
+columna_producto = None
+
+for col in columnas_posibles:
+    if col in df_all.columns:
+        columna_producto = col
+        break
+
+if columna_producto is None:
+    st.error("❌ No se encontró una columna de productos")
+    st.info(f"Columnas disponibles: {', '.join(df_all.columns)}")
+    st.stop()
+
 # Selección de restaurante
 restaurante = st.sidebar.selectbox(
     "🏪 Restaurante",
@@ -112,7 +126,14 @@ restaurante = st.sidebar.selectbox(
 
 # Filtrar productos del restaurante
 df_restaurante = df_all[df_all['restaurante'] == restaurante].copy()
-productos = sorted(df_restaurante['producto'].unique())
+
+# Obtener productos únicos y limpios
+productos_raw = df_restaurante[columna_producto].dropna().unique()
+productos = sorted([str(p) for p in productos_raw])
+
+if len(productos) == 0:
+    st.error(f"❌ No hay productos para {restaurante}")
+    st.stop()
 
 # Selección de producto
 producto_seleccionado = st.sidebar.selectbox(
@@ -124,51 +145,7 @@ producto_seleccionado = st.sidebar.selectbox(
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔧 Parámetros del Modelo")
 
-# Horizonte
-horizonte = st.sidebar.slider(
-    "📅 Horizonte de predicción (días)",
-    min_value=7,
-    max_value=60,
-    value=14,
-    step=7,
-    help="Número de días a predecir hacia el futuro"
-)
-
-# Trials de Optuna
-n_trials = st.sidebar.slider(
-    "🔬 Trials de optimización",
-    min_value=5,
-    max_value=50,
-    value=20,
-    step=5,
-    help="Más trials = mejor modelo pero más lento (recomendado: 20)"
-)
-
-# Split
-train_val_split = st.sidebar.slider(
-    "📊 % datos para entrenamiento",
-    min_value=60,
-    max_value=90,
-    value=80,
-    step=5
-)
-
-st.sidebar.markdown("---")
-
-# Botón de entrenamiento
-entrenar = st.sidebar.button(
-    "🚀 Entrenar y Predecir",
-    type="primary",
-    use_container_width=True
-)
-
-st.sidebar.markdown("---")
-st.sidebar.info("""
-💡 **Tips:**
-- Más trials mejoran precisión
-- 80% train es óptimo
-- Horizontes cortos (7-14 días) son más precisos
-""")
+# ... resto del código
 
 # ==========================================
 # INFORMACIÓN DEL PRODUCTO
