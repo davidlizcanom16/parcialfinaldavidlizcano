@@ -562,70 +562,95 @@ if 'predictor' in st.session_state:
     # ==========================================
     
     tab1, tab2, tab3 = st.tabs(["📈 Predicción", "🎯 Evaluación", "📋 Datos"])
-    
+
     with tab1:
-        st.subheader("Predicción Futura con Intervalos de Confianza (95%)")
-        
-        # Gráfico
-        fig = go.Figure()
-        
-        # Histórico
-        fig.add_trace(go.Scatter(
-            x=df_producto['fecha'],
-            y=df_producto['cantidad_vendida_diaria'],
-            mode='lines',
-            name='Histórico',
-            line=dict(color='#1f77b4', width=2),
-            opacity=0.7
-        ))
-        
-        # Intervalo
-        fig.add_trace(go.Scatter(
-            x=future_dates,
-            y=y_pred_future_upper,
-            mode='lines',
-            line=dict(width=0),
-            showlegend=False,
-            hoverinfo='skip'
-        ))
-        
-        fig.add_trace(go.Scatter(
-            x=future_dates,
-            y=y_pred_future_lower,
-            mode='lines',
-            name='Intervalo 95%',
-            line=dict(width=0),
-            fillcolor='rgba(255, 127, 14, 0.2)',
-            fill='tonexty'
-        ))
-        
-        # Predicción
-        fig.add_trace(go.Scatter(
-            x=future_dates,
-            y=y_pred_future,
-            mode='lines+markers',
-            name='Predicción',
-            line=dict(color='#ff7f0e', width=3),
-            marker=dict(size=8)
-        ))
-        
-        # Línea hoy
-        fig.add_vline(
-            x=df_producto['fecha'].max(),
-            line_dash="dot",
-            line_color="red",
-            annotation_text="Hoy"
+    st.subheader("Predicción Futura con Intervalos de Confianza (95%)")
+    
+    # Gráfico
+    fig = go.Figure()
+    
+    # Histórico
+    fig.add_trace(go.Scatter(
+        x=df_producto['fecha'],
+        y=df_producto['cantidad_vendida_diaria'],
+        mode='lines',
+        name='Histórico',
+        line=dict(color='#1f77b4', width=2),
+        opacity=0.7
+    ))
+    
+    # Intervalo superior
+    fig.add_trace(go.Scatter(
+        x=future_dates,
+        y=y_pred_future_upper,
+        mode='lines',
+        line=dict(width=0),
+        showlegend=False,
+        hoverinfo='skip'
+    ))
+    
+    # Intervalo inferior (con relleno)
+    fig.add_trace(go.Scatter(
+        x=future_dates,
+        y=y_pred_future_lower,
+        mode='lines',
+        name='Intervalo 95%',
+        line=dict(width=0),
+        fillcolor='rgba(255, 127, 14, 0.2)',
+        fill='tonexty'
+    ))
+    
+    # Predicción
+    fig.add_trace(go.Scatter(
+        x=future_dates,
+        y=y_pred_future,
+        mode='lines+markers',
+        name='Predicción',
+        line=dict(color='#ff7f0e', width=3),
+        marker=dict(size=8)
+    ))
+    
+    # Línea divisoria "Hoy" (CORREGIDA)
+    last_historical_date = pd.Timestamp(df_producto['fecha'].max())
+    
+    fig.add_shape(
+        type="line",
+        x0=last_historical_date,
+        x1=last_historical_date,
+        y0=0,
+        y1=1,
+        yref="paper",
+        line=dict(color="red", width=2, dash="dot")
+    )
+    
+    # Agregar anotación "Hoy"
+    fig.add_annotation(
+        x=last_historical_date,
+        y=1.05,
+        yref="paper",
+        text="Hoy",
+        showarrow=False,
+        font=dict(color="red", size=12)
+    )
+    
+    fig.update_layout(
+        xaxis_title="Fecha",
+        yaxis_title="Cantidad (unidades)",
+        hovermode='x unified',
+        template='plotly_white',
+        height=500,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
         )
-        
-        fig.update_layout(
-            xaxis_title="Fecha",
-            yaxis_title="Cantidad (unidades)",
-            hovermode='x unified',
-            template='plotly_white',
-            height=500
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # ... resto del código del tab1
         
         # Tabla
         st.markdown("### 📋 Predicciones Detalladas")
