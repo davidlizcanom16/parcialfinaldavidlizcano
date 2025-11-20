@@ -5,3 +5,6 @@ openpyxl
 xlrd
 scipy
 numpy
+xgboost
+scikit-learn
+optuna
