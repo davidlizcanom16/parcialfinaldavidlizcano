@@ -151,35 +151,19 @@ st.sidebar.subheader("🔧 Parámetros del Modelo")
 # INFORMACIÓN DEL PRODUCTO
 # ==========================================
 
-# Filtrar datos del producto
-df_producto = df_restaurante[df_restaurante['producto'] == producto_seleccionado].copy()
+# Filtrar datos del producto usando la columna correcta
+df_producto = df_restaurante[df_restaurante[columna_producto] == producto_seleccionado].copy()
 df_producto = df_producto.sort_values('fecha').reset_index(drop=True)
 
 # Verificar que tenga columna correcta
 if 'cantidad_vendida_diaria' not in df_producto.columns:
-    st.error("❌ Error: La columna 'cantidad_vendida_diaria' no existe en los datos")
-    st.info("Columnas disponibles: " + ", ".join(df_producto.columns))
+    st.error("❌ Error: La columna 'cantidad_vendida_diaria' no existe")
+    st.info(f"Columnas disponibles: {', '.join(df_producto.columns)}")
     st.stop()
 
-# Métricas del producto
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    st.metric("📊 Días disponibles", len(df_producto))
-
-with col2:
-    promedio = df_producto['cantidad_vendida_diaria'].mean()
-    st.metric("📈 Promedio diario", f"{promedio:.1f} un")
-
-with col3:
-    std = df_producto['cantidad_vendida_diaria'].std()
-    st.metric("📉 Desviación estándar", f"{std:.1f}")
-
-with col4:
-    periodo = f"{df_producto['fecha'].min().strftime('%Y-%m')} / {df_producto['fecha'].max().strftime('%Y-%m')}"
-    st.metric("🗓️ Periodo", periodo)
-
-st.divider()
+if len(df_producto) == 0:
+    st.warning(f"⚠️ No hay datos para {producto_seleccionado}")
+    st.stop()
 
 # ==========================================
 # GRÁFICO HISTÓRICO
