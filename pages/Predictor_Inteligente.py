@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import sys
 import os
 
-# Imports de tu estructura
+# Imports
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from utils.data_loader import cargar_datos
@@ -103,20 +103,6 @@ st.divider()
 
 st.sidebar.header("⚙️ Configuración del Predictor")
 
-# Verificar columnas disponibles
-columnas_posibles = ['producto', 'descripcion_producto', 'nombre_producto', 'codigo_producto']
-columna_producto = None
-
-for col in columnas_posibles:
-    if col in df_all.columns:
-        columna_producto = col
-        break
-
-if columna_producto is None:
-    st.error("❌ No se encontró una columna de productos")
-    st.info(f"Columnas disponibles: {', '.join(df_all.columns)}")
-    st.stop()
-
 # Selección de restaurante
 restaurante = st.sidebar.selectbox(
     "🏪 Restaurante",
@@ -127,13 +113,8 @@ restaurante = st.sidebar.selectbox(
 # Filtrar productos del restaurante
 df_restaurante = df_all[df_all['restaurante'] == restaurante].copy()
 
-# Obtener productos únicos y limpios
-productos_raw = df_restaurante[columna_producto].dropna().unique()
-productos = sorted([str(p) for p in productos_raw])
-
-if len(productos) == 0:
-    st.error(f"❌ No hay productos para {restaurante}")
-    st.stop()
+# Usar descripcion_producto (columna correcta según tu dataset)
+productos = sorted(df_restaurante['descripcion_producto'].dropna().unique())
 
 # Selección de producto
 producto_seleccionado = st.sidebar.selectbox(
@@ -145,25 +126,89 @@ producto_seleccionado = st.sidebar.selectbox(
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔧 Parámetros del Modelo")
 
-# ... resto del código
+# Horizonte
+horizonte = st.sidebar.slider(
+    "📅 Horizonte de predicción (días)",
+    min_value=7,
+    max_value=60,
+    value=14,
+    step=7,
+    help="Número de días a predecir hacia el futuro"
+)
+
+# Trials de Optuna
+n_trials = st.sidebar.slider(
+    "🔬 Trials de optimización",
+    min_value=5,
+    max_value=50,
+    value=20,
+    step=5,
+    help="Más trials = mejor modelo pero más lento (recomendado: 20)"
+)
+
+# Split
+train_val_split = st.sidebar.slider(
+    "📊 % datos para entrenamiento",
+    min_value=60,
+    max_value=90,
+    value=80,
+    step=5
+)
+
+st.sidebar.markdown("---")
+
+# BOTÓN DE ENTRENAMIENTO (ESTO FALTABA)
+entrenar = st.sidebar.button(
+    "🚀 Entrenar y Predecir",
+    type="primary",
+    use_container_width=True
+)
+
+st.sidebar.markdown("---")
+st.sidebar.info("""
+💡 **Tips:**
+- Más trials mejoran precisión
+- 80% train es óptimo
+- Horizontes cortos (7-14 días) son más precisos
+""")
 
 # ==========================================
 # INFORMACIÓN DEL PRODUCTO
 # ==========================================
 
-# Filtrar datos del producto usando la columna correcta
-df_producto = df_restaurante[df_restaurante[columna_producto] == producto_seleccionado].copy()
+# Filtrar datos del producto (usar descripcion_producto)
+df_producto = df_restaurante[df_restaurante['descripcion_producto'] == producto_seleccionado].copy()
 df_producto = df_producto.sort_values('fecha').reset_index(drop=True)
 
-# Verificar que tenga columna correcta
+# Verificar columnas
+if len(df_producto) == 0:
+    st.warning(f"⚠️ No hay datos para {producto_seleccionado}")
+    st.stop()
+
 if 'cantidad_vendida_diaria' not in df_producto.columns:
     st.error("❌ Error: La columna 'cantidad_vendida_diaria' no existe")
     st.info(f"Columnas disponibles: {', '.join(df_producto.columns)}")
     st.stop()
 
-if len(df_producto) == 0:
-    st.warning(f"⚠️ No hay datos para {producto_seleccionado}")
-    st.stop()
+# Métricas del producto
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    st.metric("📊 Días disponibles", len(df_producto))
+
+with col2:
+    promedio = df_producto['cantidad_vendida_diaria'].mean()
+    st.metric("📈 Promedio diario", f"{promedio:.1f} un")
+
+with col3:
+    std = df_producto['cantidad_vendida_diaria'].std()
+    st.metric("📉 Desviación estándar", f"{std:.1f}")
+
+with col4:
+    periodo = f"{df_producto['fecha'].min().strftime('%Y-%m')} / {df_producto['fecha'].max().strftime('%Y-%m')}"
+    st.metric("🗓️ Periodo", periodo)
+
+st.divider()
 
 # ==========================================
 # GRÁFICO HISTÓRICO
@@ -296,7 +341,8 @@ if entrenar:
                 'y_pred_future_lower': y_pred_future_lower,
                 'y_pred_future_upper': y_pred_future_upper,
                 'df_producto': df_producto,
-                'alerts': alerts
+                'alerts': alerts,
+                'producto_nombre': producto_seleccionado
             })
             
             progress_bar.empty()
@@ -326,6 +372,7 @@ if 'predictor' in st.session_state:
     y_pred_future_lower = st.session_state['y_pred_future_lower']
     y_pred_future_upper = st.session_state['y_pred_future_upper']
     df_producto = st.session_state['df_producto']
+    producto_nombre = st.session_state.get('producto_nombre', producto_seleccionado)
     
     st.divider()
     
@@ -409,7 +456,8 @@ if 'predictor' in st.session_state:
             y=y_pred_future_upper,
             mode='lines',
             line=dict(width=0),
-            showlegend=False
+            showlegend=False,
+            hoverinfo='skip'
         ))
         
         fig.add_trace(go.Scatter(
@@ -465,6 +513,20 @@ if 'predictor' in st.session_state:
         })
         
         st.dataframe(df_table, use_container_width=True, hide_index=True)
+        
+        # Interpretación
+        with st.expander("ℹ️ ¿Cómo interpretar los intervalos?"):
+            st.markdown("""
+            **Intervalo de Confianza del 95%:**
+            - Hay 95% de probabilidad de que la demanda real esté entre el límite inferior y superior
+            - **Pesimista (5%):** Cantidad mínima esperada
+            - **Predicción:** Pronóstico más probable  
+            - **Optimista (95%):** Cantidad máxima esperada
+            
+            **Recomendaciones de compra:**
+            - Si la incertidumbre es alta (>50% de la predicción), compra conservador
+            - Si la incertidumbre es baja (<30%), puedes comprar cerca de la predicción
+            """)
     
     with tab2:
         st.subheader("Evaluación en Test")
@@ -473,34 +535,69 @@ if 'predictor' in st.session_state:
         y_pred_test = st.session_state['y_pred_test']
         df_test = st.session_state['df_test']
         
-        # Gráfico test
-        fig_test = go.Figure()
+        col1, col2 = st.columns(2)
         
-        fig_test.add_trace(go.Scatter(
-            x=df_test['fecha'],
-            y=y_test,
-            mode='lines+markers',
-            name='Real',
-            line=dict(color='#1f77b4')
-        ))
+        with col1:
+            # Gráfico test
+            fig_test = go.Figure()
+            
+            fig_test.add_trace(go.Scatter(
+                x=df_test['fecha'],
+                y=y_test,
+                mode='lines+markers',
+                name='Real',
+                line=dict(color='#1f77b4')
+            ))
+            
+            fig_test.add_trace(go.Scatter(
+                x=df_test['fecha'],
+                y=y_pred_test,
+                mode='lines+markers',
+                name='Predicho',
+                line=dict(color='#ff7f0e')
+            ))
+            
+            fig_test.update_layout(
+                xaxis_title="Fecha",
+                yaxis_title="Cantidad",
+                hovermode='x unified',
+                template='plotly_white',
+                height=400,
+                title="Real vs Predicho"
+            )
+            
+            st.plotly_chart(fig_test, use_container_width=True)
         
-        fig_test.add_trace(go.Scatter(
-            x=df_test['fecha'],
-            y=y_pred_test,
-            mode='lines+markers',
-            name='Predicho',
-            line=dict(color='#ff7f0e')
-        ))
-        
-        fig_test.update_layout(
-            xaxis_title="Fecha",
-            yaxis_title="Cantidad",
-            hovermode='x unified',
-            template='plotly_white',
-            height=400
-        )
-        
-        st.plotly_chart(fig_test, use_container_width=True)
+        with col2:
+            # Scatter
+            fig_scatter = go.Figure()
+            
+            fig_scatter.add_trace(go.Scatter(
+                x=y_test,
+                y=y_pred_test,
+                mode='markers',
+                marker=dict(size=8, opacity=0.6)
+            ))
+            
+            # Línea perfecta
+            max_val = max(y_test.max(), y_pred_test.max())
+            fig_scatter.add_trace(go.Scatter(
+                x=[0, max_val],
+                y=[0, max_val],
+                mode='lines',
+                line=dict(color='red', dash='dash'),
+                name='Predicción Perfecta'
+            ))
+            
+            fig_scatter.update_layout(
+                xaxis_title="Real",
+                yaxis_title="Predicho",
+                template='plotly_white',
+                height=400,
+                title="Correlación"
+            )
+            
+            st.plotly_chart(fig_scatter, use_container_width=True)
         
         # Feature importance
         st.markdown("### 🔍 Features Más Importantes")
@@ -514,7 +611,8 @@ if 'predictor' in st.session_state:
         fig_imp.add_trace(go.Bar(
             y=importance_df['Feature'],
             x=importance_df['Importancia'],
-            orientation='h'
+            orientation='h',
+            marker=dict(color='#1f77b4')
         ))
         fig_imp.update_layout(
             xaxis_title="Importancia",
@@ -530,6 +628,7 @@ if 'predictor' in st.session_state:
         # CSV
         df_download = pd.DataFrame({
             'fecha': future_dates,
+            'producto': producto_nombre,
             'prediccion': y_pred_future.round(2),
             'limite_inferior': y_pred_future_lower.round(2),
             'limite_superior': y_pred_future_upper.round(2)
@@ -540,10 +639,13 @@ if 'predictor' in st.session_state:
         st.download_button(
             "📥 Descargar CSV",
             csv,
-            f"prediccion_{producto_seleccionado[:20]}_{datetime.now().strftime('%Y%m%d')}.csv",
+            f"prediccion_{producto_nombre[:20].replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.csv",
             "text/csv",
             use_container_width=True
         )
+        
+        st.markdown("### 📊 Preview de Datos")
+        st.dataframe(df_download, use_container_width=True)
 
 else:
-    st.info("👈 Configura los parámetros en el sidebar y presiona **'Entrenar y Predecir'**")
+    st.info("👈 Configura los parámetros en el sidebar y presiona **'Entrenar y Predecir'** para comenzar")
