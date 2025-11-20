@@ -1,5 +1,6 @@
 """
 Feature Engineering para Predictor
+Versión optimizada que minimiza pérdida de datos
 """
 
 import pandas as pd
@@ -54,8 +55,8 @@ def create_event_features(df):
     
     return df
 
-def create_lag_features(df, target_col='cantidad_vendida_diaria', lags=[1, 2, 3, 7, 14, 30]):
-    """Crear features de lags"""
+def create_lag_features(df, target_col='cantidad_vendida_diaria', lags=[1, 2, 3, 7, 14]):
+    """Crear features de lags (optimizado: sin lag_30 para conservar datos)"""
     df = df.copy()
     
     for lag in lags:
@@ -63,8 +64,8 @@ def create_lag_features(df, target_col='cantidad_vendida_diaria', lags=[1, 2, 3,
     
     return df
 
-def create_rolling_features(df, target_col='cantidad_vendida_diaria', windows=[7, 14, 30]):
-    """Crear features de rolling windows"""
+def create_rolling_features(df, target_col='cantidad_vendida_diaria', windows=[7, 14]):
+    """Crear features de rolling windows (optimizado: sin window_30)"""
     df = df.copy()
     
     for window in windows:
@@ -76,11 +77,11 @@ def create_rolling_features(df, target_col='cantidad_vendida_diaria', windows=[7
     return df
 
 def create_all_features(df, target_col='cantidad_vendida_diaria'):
-    """Crear todas las features"""
+    """Crear todas las features (versión optimizada)"""
     df = create_temporal_features(df)
     df = create_event_features(df)
-    df = create_lag_features(df, target_col)
-    df = create_rolling_features(df, target_col)
+    df = create_lag_features(df, target_col, lags=[1, 2, 3, 7, 14])  # Sin lag_30
+    df = create_rolling_features(df, target_col, windows=[7, 14])     # Sin window_30
     
     # Diferencias
     df['diff_1'] = df[target_col].diff(1)
@@ -89,11 +90,14 @@ def create_all_features(df, target_col='cantidad_vendida_diaria'):
     return df
 
 def get_feature_columns():
-    """Obtener lista de columnas de features"""
-    lag_features = [f'lag_{lag}' for lag in [1, 2, 3, 7, 14, 30]]
+    """Obtener lista de columnas de features (sincronizada con create_all_features)"""
     
+    # Lags (sin lag_30)
+    lag_features = [f'lag_{lag}' for lag in [1, 2, 3, 7, 14]]
+    
+    # Rolling windows (sin window_30)
     rolling_features = []
-    for window in [7, 14, 30]:
+    for window in [7, 14]:
         rolling_features.extend([
             f'rolling_mean_{window}',
             f'rolling_std_{window}',
@@ -101,15 +105,18 @@ def get_feature_columns():
             f'rolling_max_{window}'
         ])
     
+    # Features temporales
     temporal_features = [
         'dia_semana', 'mes', 'dia_mes_norm', 'semana_año', 'trimestre',
         'dia_semana_sin', 'dia_semana_cos', 'mes_sin', 'mes_cos', 'es_fin_semana'
     ]
     
+    # Features de eventos
     event_features = [
         'es_carnaval', 'es_grados', 'es_navidad', 'es_fin_año', 'es_temp_empresarial'
     ]
     
+    # Diferencias
     diff_features = ['diff_1', 'diff_7']
     
     return lag_features + rolling_features + temporal_features + event_features + diff_features
