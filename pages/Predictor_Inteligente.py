@@ -651,36 +651,6 @@ if 'predictor' in st.session_state:
     st.plotly_chart(fig, use_container_width=True)
     
     # ... resto del código del tab1
-        
-        # Tabla
-        st.markdown("### 📋 Predicciones Detalladas")
-        
-        interval_width = y_pred_future_upper - y_pred_future_lower
-        
-        df_table = pd.DataFrame({
-            'Fecha': future_dates,
-            'Día': future_dates.strftime('%A'),
-            'Pesimista': y_pred_future_lower.round(1),
-            'Predicción': y_pred_future.round(1),
-            'Optimista': y_pred_future_upper.round(1),
-            'Incertidumbre': interval_width.round(1)
-        })
-        
-        st.dataframe(df_table, use_container_width=True, hide_index=True)
-        
-        # Interpretación
-        with st.expander("ℹ️ ¿Cómo interpretar los intervalos?"):
-            st.markdown("""
-            **Intervalo de Confianza del 95%:**
-            - Hay 95% de probabilidad de que la demanda real esté entre el límite inferior y superior
-            - **Pesimista (5%):** Cantidad mínima esperada
-            - **Predicción:** Pronóstico más probable  
-            - **Optimista (95%):** Cantidad máxima esperada
-            
-            **Recomendaciones de compra:**
-            - Si la incertidumbre es alta (>50% de la predicción), compra conservador
-            - Si la incertidumbre es baja (<30%), puedes comprar cerca de la predicción
-            """)
     
     with tab2:
         st.subheader("Evaluación en Test")
